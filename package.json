@@ -1,0 +1,19 @@
+{
+  "name": "pxpoint-coinbase",
+  "version": "0.0.0",
+  "description": "A coinbase for the pricepoint market data system.",
+  "main": "src/index.js",
+  "scripts": {
+    "test": "mocha test"
+  },
+  "keywords": [
+    "finance",
+    "pxpoint",
+    "pricepoint"
+  ],
+  "author": "Brett Jackson",
+  "license": "BSD-3-Clause",
+  "dependencies": {
+    "ws": "websockets/ws"
+  }
+}
