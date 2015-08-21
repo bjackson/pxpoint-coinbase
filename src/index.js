@@ -28,7 +28,7 @@ class Coinbase extends EventEmitter {
     return new Promise((resolve, reject) => {
         this.ws[product].on('message', data => {
           data = JSON.parse(data);
-          this.queuedOrder.push({
+          this.queuedOrders.push({
             eventType: data.type,
             data: transformData(data)
           });
@@ -58,7 +58,6 @@ class Coinbase extends EventEmitter {
     this.products.forEach(product => {
       this.clients[product].getProductOrderBook({ level: 3 }, data => {
         this.queuedMessages[product].forEach(message => {
-          data = JSON.parse(message);
           this.emit('message', {
             eventType: message.type,
             data: transformData(message)
@@ -69,10 +68,12 @@ class Coinbase extends EventEmitter {
 
         this.ws[product].on('message', data => {
           data = JSON.parse(data);
-          this.emit('message', {
-            eventType: data.type,
-            data: transformData(data)
-          });
+          if (data.type != 'received') {
+            this.emit('message', {
+              eventType: data.type,
+              data: transformData(data)
+            });
+          }
         });
 
         this.ws[product].on('close', () => {
@@ -110,8 +111,8 @@ function transformData(data) {
 
   if (data.type === 'match') {
     rtnData.LastQty = parseFloat(data.size);
-  } else if (data.type === 'received') {
-    rtnData.MDEntrySize = parseFloat(data.size);
+  } else if (data.type === 'open') {
+    rtnData.MDEntrySize = parseFloat(data.remaining_size);
   }
 
   if (data.type === 'match') {
