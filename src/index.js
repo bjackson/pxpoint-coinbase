@@ -1,29 +1,94 @@
 const EventEmitter = require("events").EventEmitter;
 const WebSocket = require('ws');
+const CoinbaseExchange = require('coinbase-exchange');
+const async = require('async');
 
 class Coinbase extends EventEmitter {
   constructor(options) {
     super();
-    this.ws = new WebSocket('wss://ws-feed.exchange.coinbase.com');
-    this.registerCallbacks();
+    this.products = options.products;
+    this.orderBookInitialized = false;
+    this.queuedMessages = {};
+    this.clients = {};
+    this.ws = {};
+    this.products.forEach(product => {
+      this.queuedMessages[product] = [];
+      this.clients[product] = new CoinbaseExchange.PublicClient({ productID: product });
+    });
   }
 
-  registerCallbacks() {
-    this.ws.on('open', () => {
-      this.ws.send(JSON.stringify({
-        type: 'subscribe',
-        product_id: 'BTC-USD'
-      }));
+  connect() {
+    this.products.forEach(product => {
+      this.ws[product] = new WebSocket('wss://ws-feed.exchange.coinbase.com');
+      this.registerCallbacks(product);
     });
+  }
 
-    this.ws.on('message', (data) => {
-      data = JSON.parse(data);
-      if (data.type === 'match') {
-        console.log(data);
-      }
-      this.emit('message', {
-        eventType: data.type,
-        data: transformData(data)
+  registerCallbacks(product) {
+    return new Promise((resolve, reject) => {
+        this.ws[product].on('message', data => {
+          data = JSON.parse(data);
+          this.queuedOrder.push({
+            eventType: data.type,
+            data: transformData(data)
+          });
+        });
+
+        this.ws[product].on('close', () => {
+          this.emit('close');
+        });
+
+        this.ws[product].on('open', () => {
+          this.ws[product].send(JSON.stringify({
+            type: 'subscribe',
+            product_id: product
+          }), err => {
+            if (err) {
+              this.emit('error', err);
+              reject(err);
+            } else {
+              resolve();
+            }
+          });
+        });
+    });
+  }
+
+  createOrderBook() {
+    this.products.forEach(product => {
+      this.clients[product].getProductOrderBook({ level: 3 }, data => {
+        this.queuedMessages[product].forEach(message => {
+          data = JSON.parse(message);
+          this.emit('message', {
+            eventType: message.type,
+            data: transformData(message)
+          });
+        });
+
+        this.ws[product].removeAllListeners();
+
+        this.ws[product].on('message', data => {
+          data = JSON.parse(data);
+          this.emit('message', {
+            eventType: data.type,
+            data: transformData(data)
+          });
+        });
+
+        this.ws[product].on('close', () => {
+          this.emit('close');
+        });
+
+        this.ws[product].on('open', () => {
+            this.ws[product].send(JSON.stringify({
+              type: 'subscribe',
+              product_id: product
+            }), err => {
+              if (err) {
+                this.emit('error', err);
+              }
+            });
+        });
       });
     });
   }
